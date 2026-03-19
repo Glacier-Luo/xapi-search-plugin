@@ -1,23 +1,9 @@
 {
   "id": "xapi-search",
   "name": "xapi.to Web Search",
-  "description": "xapi.to Web Search Provider for OpenClaw",
+  "description": "Search the web using xapi.to unified API",
   "version": "0.1.0",
-  "providers": ["xapi-search"],
-  "providerAuthEnvVars": {
-    "XAPI_API_KEY": "xapi-search"
-  },
-  "providerAuthChoices": [
-    {
-      "provider": "xapi-search",
-      "method": "api-key",
-      "choiceId": "xapi-api-key",
-      "choiceLabel": "xapi.to API Key",
-      "groupId": "xapi",
-      "optionKey": "xapiApiKey",
-      "cliFlag": "--xapi-api-key"
-    }
-  ],
+  "tools": ["xapi_web_search"],
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

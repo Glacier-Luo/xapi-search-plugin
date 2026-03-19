@@ -57,7 +57,26 @@ describe.skipIf(SKIP)("smoke: real xapi.to API", () => {
       expect(item.snippet).toBeTruthy();
     }
 
+    // Print raw API response (truncated)
+    console.log("\n[smoke] === Raw API response (partial) ===");
+    if (result.data.knowledgeGraph) {
+      console.log("[smoke] knowledgeGraph:", JSON.stringify(result.data.knowledgeGraph, null, 2));
+    }
+    console.log(`[smoke] organic count: ${result.data.organic!.length}`);
+    for (const item of result.data.organic!.slice(0, 3)) {
+      console.log(`[smoke]   - ${item.title}`);
+      console.log(`[smoke]     ${item.link}`);
+      console.log(`[smoke]     ${item.snippet.slice(0, 120)}...`);
+    }
+
+    // Print transformed results
+    console.log("\n[smoke] === Transformed results ===");
     console.log(`[smoke] Got ${transformed.length} results for "TypeScript"`);
-    console.log(`[smoke] First result: ${transformed[0]!.title} — ${transformed[0]!.url}`);
+    for (const item of transformed.slice(0, 3)) {
+      console.log(`[smoke]   title:   ${item.title}`);
+      console.log(`[smoke]   url:     ${item.url}`);
+      console.log(`[smoke]   snippet: ${item.snippet.slice(0, 120)}...`);
+      console.log("[smoke]   ---");
+    }
   }, 20_000); // 20s timeout for real network call
 });

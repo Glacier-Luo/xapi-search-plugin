@@ -31,7 +31,7 @@ describe("plugin", () => {
   it("registers without throwing even when no API key is set", () => {
     const api = {
       config: {},
-      registerWebSearchProvider: vi.fn(),
+      registerTool: vi.fn(),
     };
 
     // Should NOT throw — key check is deferred to search-time
@@ -42,7 +42,7 @@ describe("plugin", () => {
   it("passes api and a client factory to registerXapiWebSearch", () => {
     const api = {
       config: { apiKey: "sk-test" },
-      registerWebSearchProvider: vi.fn(),
+      registerTool: vi.fn(),
     };
 
     plugin.register(api);
@@ -58,7 +58,7 @@ describe("plugin", () => {
 
     const api = {
       config: { apiKey: "sk-from-config" },
-      registerWebSearchProvider: vi.fn(),
+      registerTool: vi.fn(),
     };
 
     plugin.register(api);
@@ -74,7 +74,7 @@ describe("plugin", () => {
     process.env.XAPI_API_KEY = "sk-from-env";
     const api = {
       config: {},
-      registerWebSearchProvider: vi.fn(),
+      registerTool: vi.fn(),
     };
 
     plugin.register(api);
@@ -89,7 +89,7 @@ describe("plugin", () => {
     process.env.XAPI_API_KEY = "sk-from-env";
     const api = {
       config: { apiKey: "sk-from-config" },
-      registerWebSearchProvider: vi.fn(),
+      registerTool: vi.fn(),
     };
 
     plugin.register(api);
@@ -103,7 +103,7 @@ describe("plugin", () => {
   it("factory throws when no API key is available at call time", () => {
     const api = {
       config: {},
-      registerWebSearchProvider: vi.fn(),
+      registerTool: vi.fn(),
     };
 
     plugin.register(api);

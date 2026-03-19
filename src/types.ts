@@ -7,7 +7,30 @@ export interface PluginConfig {
   readonly language?: string;
 }
 
+// --- Tool registration types (matches OpenClaw 2026.3.2 runtime) ---
+
+export interface ToolContentBlock {
+  readonly type: "text";
+  readonly text: string;
+}
+
+export interface ToolResult {
+  readonly content: readonly ToolContentBlock[];
+  readonly isError?: boolean;
+}
+
+export interface ToolDefinition {
+  readonly name: string;
+  readonly label?: string;
+  readonly description: string;
+  readonly parameters: Record<string, unknown>;
+  readonly execute: (
+    toolCallId: string,
+    params: Record<string, unknown>,
+  ) => Promise<ToolResult>;
+}
+
 export interface PluginApi {
   readonly config: PluginConfig;
-  registerWebSearchProvider(provider: unknown): void;
+  registerTool(tool: ToolDefinition): void;
 }
