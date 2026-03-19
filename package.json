@@ -1,5 +1,5 @@
 {
-  "name": "@xapi/openclaw-plugin",
+  "name": "@xapi/openclaw-xapi-search",
   "version": "0.1.0",
   "description": "xapi.to Web Search Provider for OpenClaw",
   "type": "module",
@@ -18,7 +18,10 @@
   },
   "files": [
     "index.ts",
-    "src",
+    "src/index.ts",
+    "src/types.ts",
+    "src/lib/xapi-client.ts",
+    "src/providers/web-search.ts",
     "dist",
     "openclaw.plugin.json"
   ],

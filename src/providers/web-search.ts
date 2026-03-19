@@ -97,7 +97,10 @@ interface WebSearchArgs {
   readonly count?: number;
 }
 
-export function registerXapiWebSearch(api: PluginApi, client: XapiClient): void {
+export function registerXapiWebSearch(
+  api: PluginApi,
+  getClient: XapiClient | (() => XapiClient),
+): void {
   const locale = api.config.locale ?? DEFAULT_LOCALE;
   const language = api.config.language ?? DEFAULT_LANGUAGE;
 
@@ -108,6 +111,7 @@ export function registerXapiWebSearch(api: PluginApi, client: XapiClient): void 
     id: "xapi-search",
 
     async search(args: WebSearchArgs): Promise<readonly SearchResult[]> {
+      const client = typeof getClient === "function" ? getClient() : getClient;
       const result = await client.callAction<SerperSearchData>("web.search", {
         q: args.query,
         num: args.count ?? 10,
