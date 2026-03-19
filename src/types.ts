@@ -30,7 +30,11 @@ export interface ToolDefinition {
   ) => Promise<ToolResult>;
 }
 
+export interface RegisterToolOptions {
+  readonly optional?: boolean;
+}
+
 export interface PluginApi {
   readonly config: PluginConfig;
-  registerTool(tool: ToolDefinition): void;
+  registerTool(tool: ToolDefinition, options?: RegisterToolOptions): void;
 }

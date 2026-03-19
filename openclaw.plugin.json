@@ -21,5 +21,20 @@
         "description": "Search language code (e.g. \"en\", \"zh-cn\", \"ja\"). Defaults to \"en\"."
       }
     }
+  },
+  "uiHints": {
+    "apiKey": {
+      "label": "xapi.to API Key",
+      "placeholder": "sk-...",
+      "sensitive": true
+    },
+    "locale": {
+      "label": "Search Locale",
+      "placeholder": "us"
+    },
+    "language": {
+      "label": "Search Language",
+      "placeholder": "en"
+    }
   }
 }
