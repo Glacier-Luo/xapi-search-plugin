@@ -1,12 +1,16 @@
 {
   "id": "xapi-search",
   "name": "xapi.to Web Search",
-  "description": "Search the web using xapi.to unified API",
+  "description": "Web search provider powered by xapi.to unified API",
   "version": "0.1.0",
-  "tools": ["xapi_web_search"],
+  "capabilities": {
+    "webSearchProvider": "xapi-search",
+    "tools": ["xapi_web_search"],
+    "commands": ["search"],
+    "cli": ["xapi-search"]
+  },
   "configSchema": {
     "type": "object",
-    "additionalProperties": false,
     "properties": {
       "apiKey": {
         "type": "string",

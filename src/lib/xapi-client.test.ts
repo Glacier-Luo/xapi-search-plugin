@@ -112,6 +112,43 @@ describe("createXapiClient", () => {
     ).rejects.toThrow("xapi.to web.search timed out after 15000ms");
   });
 
+  it("throws when response body is not valid JSON", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      json: () => Promise.reject(new SyntaxError("Unexpected token <")),
+    } as Response);
+
+    const client = createXapiClient({ apiKey: "sk-test", host: "https://test.xapi.to" });
+
+    await expect(
+      client.callAction("web.search", { q: "test" }),
+    ).rejects.toThrow("response is not valid JSON");
+  });
+
+  it("throws when response is missing 'success' field", async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ error: "rate limited" }),
+    );
+
+    const client = createXapiClient({ apiKey: "sk-test", host: "https://test.xapi.to" });
+
+    await expect(
+      client.callAction("web.search", { q: "test" }),
+    ).rejects.toThrow("unexpected response shape");
+  });
+
+  it("throws when response is null", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse(null));
+
+    const client = createXapiClient({ apiKey: "sk-test", host: "https://test.xapi.to" });
+
+    await expect(
+      client.callAction("web.search", { q: "test" }),
+    ).rejects.toThrow("unexpected response shape");
+  });
+
   it("uses DEFAULT_HOST when no host is provided and env is unset", async () => {
     delete process.env.XAPI_ACTION_HOST;
     mockFetch.mockResolvedValueOnce(

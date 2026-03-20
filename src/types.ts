@@ -7,7 +7,25 @@ export interface PluginConfig {
   readonly language?: string;
 }
 
-// --- Tool registration types (matches OpenClaw 2026.3.2 runtime) ---
+// --- Search result ---
+
+export interface SearchResult {
+  readonly title: string;
+  readonly url: string;
+  readonly snippet: string;
+}
+
+// --- Web Search Provider types (OpenClaw >= 2026.3.7) ---
+
+export interface WebSearchProvider {
+  readonly id: string;
+  search(args: {
+    readonly query: string;
+    readonly count?: number;
+  }): Promise<readonly SearchResult[]>;
+}
+
+// --- Tool registration types (OpenClaw >= 2026.3.2) ---
 
 export interface ToolContentBlock {
   readonly type: "text";
@@ -30,11 +48,47 @@ export interface ToolDefinition {
   ) => Promise<ToolResult>;
 }
 
-export interface RegisterToolOptions {
-  readonly optional?: boolean;
+// --- Chat Command types (OpenClaw >= 2026.3.2) ---
+
+export interface CommandContext {
+  readonly senderId: string;
+  readonly channel: unknown;
+  readonly isAuthorizedSender: boolean;
+  readonly args: string;
+  readonly commandBody: string;
+  readonly config: Record<string, unknown>;
 }
+
+export interface CommandDefinition {
+  readonly name: string;
+  readonly description: string;
+  readonly acceptsArgs?: boolean;
+  readonly requireAuth?: boolean;
+  readonly handler: (ctx: CommandContext) => { text: string } | Promise<{ text: string }>;
+}
+
+// --- CLI Command types (OpenClaw >= 2026.3.2) ---
+
+export interface CliSetupContext {
+  readonly program: {
+    command(name: string): CliCommand;
+  };
+}
+
+export interface CliCommand {
+  description(desc: string): CliCommand;
+  argument(name: string, desc?: string): CliCommand;
+  option(flags: string, desc?: string, defaultValue?: unknown): CliCommand;
+  action(fn: (...args: unknown[]) => void | Promise<void>): CliCommand;
+  command(name: string): CliCommand;
+}
+
+// --- Plugin API (supports all registration paths) ---
 
 export interface PluginApi {
   readonly config: PluginConfig;
-  registerTool(tool: ToolDefinition, options?: RegisterToolOptions): void;
+  registerWebSearchProvider?(provider: WebSearchProvider): void;
+  registerTool?(tool: ToolDefinition): void;
+  registerCommand?(command: CommandDefinition): void;
+  registerCli?(setup: (ctx: CliSetupContext) => void, options: { commands: string[] }): void;
 }

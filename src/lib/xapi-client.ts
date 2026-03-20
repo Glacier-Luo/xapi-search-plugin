@@ -52,7 +52,18 @@ export function createXapiClient(config: XapiClientConfig): XapiClient {
           );
         }
 
-        return (await response.json()) as XapiActionResponse<T>;
+        let body: unknown;
+        try {
+          body = await response.json();
+        } catch {
+          throw new Error(`xapi.to ${actionId}: response is not valid JSON`);
+        }
+
+        if (typeof body !== "object" || body === null || !("success" in body)) {
+          throw new Error(`xapi.to ${actionId}: unexpected response shape`);
+        }
+
+        return body as XapiActionResponse<T>;
       } catch (err) {
         if (isAbortError(err)) {
           throw new Error(
