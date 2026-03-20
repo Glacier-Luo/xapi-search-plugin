@@ -21,7 +21,7 @@
     "src/index.ts",
     "src/types.ts",
     "src/lib/xapi-client.ts",
-    "src/providers/web-search.ts",
+    "src/providers/xapi-web-search-provider.ts",
     "dist",
     "openclaw.plugin.json"
   ],
@@ -43,7 +43,11 @@
   "peerDependencies": {
     "openclaw": ">=2026.3.7"
   },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.0"
+  },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.4.0",
     "vitest": "^4.1.0"
   }

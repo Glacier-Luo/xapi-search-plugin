@@ -1,11 +1,26 @@
 # xapi.to Web Search Plugin for OpenClaw
 
-Web search provider plugin powered by [xapi.to](https://xapi.to) unified API. Provides four integration paths with OpenClaw, supporting runtime feature detection for maximum compatibility.
+Web search provider plugin powered by [xapi.to](https://xapi.to) unified API. Implements `WebSearchProviderPlugin` interface to integrate as a first-class web search provider in OpenClaw.
+
+## Architecture
+
+This plugin follows the same pattern as OpenClaw's bundled providers (e.g. Perplexity):
+
+```
+definePluginEntry → register(api) → api.registerWebSearchProvider(createXapiWebSearchProvider())
+```
+
+The provider factory `createXapiWebSearchProvider()` returns a `WebSearchProviderPlugin` with:
+
+- Credential resolution (config + `XAPI_API_KEY` env var)
+- `createTool()` factory — OpenClaw calls this to create the web search tool
+- Structured result payload (query, provider, count, tookMs, externalContent, results)
+
+Additionally, the plugin registers chat command (`/search`) and CLI commands as complementary paths.
 
 ## Installation
 
 ```bash
-# In your OpenClaw project
 npm install @xapi/xapi-search
 ```
 
@@ -33,130 +48,109 @@ Or configure in `openclaw.json`:
 {
   "plugins": {
     "@xapi/xapi-search": {
-      "apiKey": "sk-..."
+      "config": {
+        "webSearch": {
+          "apiKey": "sk-..."
+        }
+      }
     }
   }
 }
 ```
 
-> API key validation is deferred to search-time. The plugin loads as "installed but not configured" until the first search call, avoiding startup crashes.
-
 ### Optional Settings
 
-| Setting    | Description                        | Default |
-|------------|------------------------------------|---------|
-| `locale`   | Search locale / country code       | `"us"`  |
-| `language` | Search language code               | `"en"`  |
+Configure under `webSearch`:
 
-Examples: `locale: "cn"`, `language: "zh-cn"` for Chinese results.
+| Setting    | Description                  | Default |
+|------------|------------------------------|---------|
+| `locale`   | Search country code          | `"us"`  |
+| `language` | Search language code         | `"en"`  |
 
-## Four Integration Paths
+## Integration Paths
 
-The plugin uses runtime feature detection (`typeof api.registerXxx === "function"`) to register all available paths. This ensures forward and backward compatibility across OpenClaw versions.
+### Primary: Web Search Provider
 
-### Path 1: Web Search Provider (OpenClaw >= 2026.3.7)
+Implements `WebSearchProviderPlugin` — the same interface used by Perplexity and other bundled providers. When registered, OpenClaw routes all `web_search` tool calls through xapi.to.
 
-Replaces OpenClaw's built-in `web_search` with xapi.to. When registered, all LLM web search requests are automatically routed through xapi.to.
+The provider's `createTool()` returns a `WebSearchProviderToolDefinition` whose `execute()` returns structured payloads:
 
-No user action needed — works transparently once the plugin is installed.
-
-### Path 2: Standalone Tool `xapi_web_search` (OpenClaw >= 2026.3.2)
-
-Registers an independent tool that LLM can invoke directly. Useful as a fallback on older OpenClaw versions, or when you want both the built-in provider and a separate xapi.to tool.
-
-LLM usage example:
-
+```typescript
+{
+  query: "TypeScript generics",
+  provider: "xapi",
+  count: 5,
+  tookMs: 230,
+  externalContent: { untrusted: true, source: "web_search", provider: "xapi" },
+  results: [
+    { title: "...", url: "...", description: "...", siteName: "...", published: "..." }
+  ]
+}
 ```
-I'll search for the latest TypeScript release notes using xapi_web_search.
-```
 
-Tool parameters:
+### Complementary: Chat Command `/search`
 
-| Parameter | Type     | Required | Description                   |
-|-----------|----------|----------|-------------------------------|
-| `query`   | `string` | Yes      | The search query to execute   |
-| `count`   | `number` | No       | Number of results (1-20, default 10) |
-
-### Path 3: Chat Command `/search` (OpenClaw >= 2026.3.2)
-
-Slash command that bypasses LLM and returns search results directly to the chat.
+Slash command that bypasses LLM and returns search results directly:
 
 ```
 /search TypeScript 5.8 release date
 ```
 
-Output:
-
-```
-Search results for "TypeScript 5.8 release date":
-
-1. **Announcing TypeScript 5.8**
-   https://devblogs.microsoft.com/typescript/...
-   TypeScript 5.8 was released on February 28, 2025...
-
-2. **TypeScript 5.8 Release Notes**
-   https://www.typescriptlang.org/docs/...
-   ...
-```
-
-### Path 4: CLI Commands (OpenClaw >= 2026.3.2)
-
-Terminal subcommands for command-line usage.
-
-**Search from terminal:**
+### Complementary: CLI Commands
 
 ```bash
-openclaw xapi-search search "TypeScript generics"
-openclaw xapi-search search "Node.js performance" -n 5
-```
-
-**Check connectivity:**
-
-```bash
+openclaw xapi-search search "TypeScript generics" -n 5
 openclaw xapi-search status
 ```
-
-## Search Results
-
-All paths return results in the same format:
-
-```typescript
-interface SearchResult {
-  title: string;   // Page title
-  url: string;     // Page URL
-  snippet: string; // Text excerpt
-}
-```
-
-Results are assembled from:
-- **Knowledge Graph** (if available) — inserted as the first result for direct answers
-- **Organic results** — mapped one-to-one from the search engine response
 
 ## Project Structure
 
 ```
 xapi-search-plugin/
-  index.ts                    # Root entry point (re-exports src/index)
-  openclaw.plugin.json        # Plugin manifest with capabilities
+  index.ts                                     # Root entry (re-export)
+  openclaw.plugin.json                         # Plugin manifest
   src/
-    index.ts                  # Plugin registration and API key resolution
-    types.ts                  # Shared TypeScript interfaces
+    index.ts                                   # definePluginEntry + command/CLI registration
+    types.ts                                   # SDK types (inline until SDK available)
     lib/
-      xapi-client.ts          # HTTP client for xapi.to unified action API
-      xapi-client.test.ts     # Client unit tests
+      xapi-client.ts                           # HTTP client for xapi.to
+      xapi-client.test.ts                      # Client tests
     providers/
-      web-search.ts           # Search logic + 4-path registration
-      web-search.test.ts      # Unit tests (transformResults, etc.)
-      web-search.integration.test.ts  # Integration tests (all paths)
+      xapi-web-search-provider.ts              # Provider factory (core)
+      xapi-web-search-provider.test.ts         # Provider tests
 ```
 
 ## Development
 
 ```bash
-npm test          # Run all tests
-npm run test:watch # Watch mode
-npm run build     # TypeScript compilation
+npm install
+npm test            # Run all tests (71 tests)
+npm run test:watch  # Watch mode
+npm run build       # TypeScript compilation
+
+# Smoke test (requires real API key)
+XAPI_API_KEY=sk-xxx SMOKE=1 npx vitest run src/smoke.test.ts
 ```
+
+## SDK Migration
+
+When `openclaw/plugin-sdk` is published:
+
+1. Replace inline types in `src/types.ts` with SDK imports:
+   ```typescript
+   import { definePluginEntry } from "openclaw/plugin-sdk/core";
+   import type { WebSearchProviderPlugin } from "openclaw/plugin-sdk/provider-web-search";
+   ```
+
+2. Replace custom HTTP client with SDK utilities:
+   ```typescript
+   import { withTrustedWebSearchEndpoint, wrapWebContent } from "openclaw/plugin-sdk/provider-web-search";
+   ```
+
+3. Add caching via SDK:
+   ```typescript
+   import { buildSearchCacheKey, readCachedSearchPayload, writeCachedSearchPayload } from "openclaw/plugin-sdk/provider-web-search";
+   ```
 
 ## License
 

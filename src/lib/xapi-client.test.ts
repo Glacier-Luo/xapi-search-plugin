@@ -149,6 +149,23 @@ describe("createXapiClient", () => {
     ).rejects.toThrow("unexpected response shape");
   });
 
+  it("uses custom timeoutMs when provided", async () => {
+    mockFetch.mockImplementationOnce(() => {
+      const err = new DOMException("The operation was aborted.", "AbortError");
+      return Promise.reject(err);
+    });
+
+    const client = createXapiClient({
+      apiKey: "sk-test",
+      host: "https://test.xapi.to",
+      timeoutMs: 5000,
+    });
+
+    await expect(
+      client.callAction("web.search", { q: "test" }),
+    ).rejects.toThrow("xapi.to web.search timed out after 5000ms");
+  });
+
   it("uses DEFAULT_HOST when no host is provided and env is unset", async () => {
     delete process.env.XAPI_ACTION_HOST;
     mockFetch.mockResolvedValueOnce(

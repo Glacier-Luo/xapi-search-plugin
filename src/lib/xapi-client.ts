@@ -1,9 +1,10 @@
 const DEFAULT_HOST = "https://c.xapi.to";
-const REQUEST_TIMEOUT_MS = 15_000;
+const DEFAULT_TIMEOUT_MS = 15_000;
 
 export interface XapiClientConfig {
   readonly apiKey: string;
   readonly host?: string;
+  readonly timeoutMs?: number;
 }
 
 export type XapiActionResponse<T = unknown> =
@@ -23,6 +24,7 @@ function isAbortError(err: unknown): boolean {
 
 export function createXapiClient(config: XapiClientConfig): XapiClient {
   const host = config.host ?? process.env.XAPI_ACTION_HOST ?? DEFAULT_HOST;
+  const timeoutMs = config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   return {
     async callAction<T = unknown>(
@@ -32,7 +34,7 @@ export function createXapiClient(config: XapiClientConfig): XapiClient {
       const controller = new AbortController();
       const timeout = setTimeout(
         () => controller.abort(),
-        REQUEST_TIMEOUT_MS,
+        timeoutMs,
       );
 
       try {
@@ -67,7 +69,7 @@ export function createXapiClient(config: XapiClientConfig): XapiClient {
       } catch (err) {
         if (isAbortError(err)) {
           throw new Error(
-            `xapi.to ${actionId} timed out after ${REQUEST_TIMEOUT_MS}ms`,
+            `xapi.to ${actionId} timed out after ${timeoutMs}ms`,
           );
         }
         throw err;

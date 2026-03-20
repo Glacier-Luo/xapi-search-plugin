@@ -1,44 +1,42 @@
 {
   "id": "xapi-search",
-  "name": "xapi.to Web Search",
   "description": "Web search provider powered by xapi.to unified API",
-  "version": "0.1.0",
-  "capabilities": {
-    "webSearchProvider": "xapi-search",
-    "tools": ["xapi_web_search"],
-    "commands": ["search"],
-    "cli": ["xapi-search"]
+  "providerAuthEnvVars": {
+    "xapi": ["XAPI_API_KEY"]
+  },
+  "uiHints": {
+    "webSearch.apiKey": {
+      "label": "xapi.to API Key",
+      "help": "xapi.to API key for web search.",
+      "sensitive": true,
+      "placeholder": "sk-..."
+    },
+    "webSearch.locale": {
+      "label": "Search Locale",
+      "help": "Search locale / country code (e.g. \"us\", \"cn\", \"jp\"). Defaults to \"us\"."
+    },
+    "webSearch.language": {
+      "label": "Search Language",
+      "help": "Search language code (e.g. \"en\", \"zh-cn\", \"ja\"). Defaults to \"en\"."
+    }
   },
   "configSchema": {
     "type": "object",
     "properties": {
-      "apiKey": {
-        "type": "string",
-        "description": "xapi.to API Key (also configurable via XAPI_API_KEY env var)"
-      },
-      "locale": {
-        "type": "string",
-        "description": "Search locale / country code (e.g. \"us\", \"cn\", \"jp\"). Defaults to \"us\"."
-      },
-      "language": {
-        "type": "string",
-        "description": "Search language code (e.g. \"en\", \"zh-cn\", \"ja\"). Defaults to \"en\"."
+      "webSearch": {
+        "type": "object",
+        "properties": {
+          "apiKey": {
+            "type": ["string", "object"]
+          },
+          "locale": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string"
+          }
+        }
       }
-    }
-  },
-  "uiHints": {
-    "apiKey": {
-      "label": "xapi.to API Key",
-      "placeholder": "sk-...",
-      "sensitive": true
-    },
-    "locale": {
-      "label": "Search Locale",
-      "placeholder": "us"
-    },
-    "language": {
-      "label": "Search Language",
-      "placeholder": "en"
     }
   }
 }
