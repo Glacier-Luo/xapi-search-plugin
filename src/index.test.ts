@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-// Mock the provider module — use proper named exports (not __testing)
+// Mock the provider module
 vi.mock("./providers/xapi-web-search-provider.js", () => {
   return {
     createXapiWebSearchProvider: vi.fn().mockReturnValue({
@@ -17,6 +17,22 @@ vi.mock("./providers/xapi-web-search-provider.js", () => {
   };
 });
 
+// Mock the search tool module
+vi.mock("./tools/xapi-search-tool.js", () => ({
+  createXapiSearchTool: vi.fn().mockReturnValue({
+    name: "xapi_search",
+    label: "xapi.to Search",
+    description: "Search tool",
+    parameters: {},
+    execute: vi.fn(),
+  }),
+}));
+
+// Mock SDK definePluginEntry to pass through
+vi.mock("openclaw/plugin-sdk/plugin-entry", () => ({
+  definePluginEntry: (def: unknown) => def,
+}));
+
 import plugin from "./index.js";
 import {
   createXapiWebSearchProvider,
@@ -24,6 +40,39 @@ import {
   resolveSearchCount,
   runXapiSearch,
 } from "./providers/xapi-web-search-provider.js";
+import { createXapiSearchTool } from "./tools/xapi-search-tool.js";
+
+// Helper: build a minimal API object matching OpenClawPluginApi shape
+function buildApi(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "xapi-search",
+    name: "xapi.to Web Search",
+    source: "test",
+    registrationMode: "full" as const,
+    config: {},
+    pluginConfig: overrides.pluginConfig ?? {},
+    runtime: {},
+    logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+    registerTool: vi.fn(),
+    registerHook: vi.fn(),
+    registerHttpRoute: vi.fn(),
+    registerChannel: vi.fn(),
+    registerGatewayMethod: vi.fn(),
+    registerCli: vi.fn(),
+    registerService: vi.fn(),
+    registerProvider: vi.fn(),
+    registerSpeechProvider: vi.fn(),
+    registerMediaUnderstandingProvider: vi.fn(),
+    registerImageGenerationProvider: vi.fn(),
+    registerWebSearchProvider: vi.fn(),
+    registerInteractiveHandler: vi.fn(),
+    onConversationBindingResolved: vi.fn(),
+    registerCommand: vi.fn(),
+    registerContextEngine: vi.fn(),
+    registerMemoryPromptSection: vi.fn(),
+    ...overrides,
+  };
+}
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -48,51 +97,43 @@ describe("plugin entry", () => {
 });
 
 describe("plugin.register — provider path", () => {
-  it("registers web search provider when registerWebSearchProvider exists", () => {
-    const registerWebSearchProvider = vi.fn();
-    plugin.register({
-      config: {},
-      registerWebSearchProvider,
-    });
+  it("registers web search provider", () => {
+    const api = buildApi();
+    plugin.register(api as never);
 
-    expect(registerWebSearchProvider).toHaveBeenCalledOnce();
+    expect(api.registerWebSearchProvider).toHaveBeenCalledOnce();
     expect(createXapiWebSearchProvider).toHaveBeenCalledOnce();
   });
 
-  it("does not throw when registerWebSearchProvider is absent", () => {
-    expect(() => plugin.register({ config: {} })).not.toThrow();
+  it("registers standalone xapi_search agent tool", () => {
+    const api = buildApi();
+    plugin.register(api as never);
+
+    expect(api.registerTool).toHaveBeenCalledOnce();
+    expect(createXapiSearchTool).toHaveBeenCalledOnce();
+    const registeredTool = api.registerTool.mock.calls[0]![0];
+    expect(registeredTool.name).toBe("xapi_search");
   });
 });
 
 describe("plugin.register — command path", () => {
-  it("registers /search command when registerCommand exists", () => {
-    const registerCommand = vi.fn();
-    plugin.register({
-      config: {},
-      registerCommand,
-    });
+  it("registers /search command", () => {
+    const api = buildApi();
+    plugin.register(api as never);
 
-    expect(registerCommand).toHaveBeenCalledOnce();
-    const cmd = registerCommand.mock.calls[0]![0];
+    expect(api.registerCommand).toHaveBeenCalledOnce();
+    const cmd = api.registerCommand.mock.calls[0]![0];
     expect(cmd.name).toBe("search");
     expect(cmd.acceptsArgs).toBe(true);
   });
 
-  it("does not register command when registerCommand is absent", () => {
-    const registerWebSearchProvider = vi.fn();
-    plugin.register({ config: {}, registerWebSearchProvider });
-
-    // no error, and registerCommand not called
-    expect(registerWebSearchProvider).toHaveBeenCalledOnce();
-  });
-
   it("command handler returns usage when args empty", async () => {
-    const registerCommand = vi.fn();
-    plugin.register({ config: {}, registerCommand });
+    const api = buildApi();
+    plugin.register(api as never);
 
-    const handler = registerCommand.mock.calls[0]![0].handler;
+    const handler = api.registerCommand.mock.calls[0]![0].handler;
     const result = await handler({
-      senderId: "u1", channel: null, isAuthorizedSender: true,
+      senderId: "u1", channel: "test", isAuthorizedSender: true,
       args: "", commandBody: "/search", config: {},
     });
     expect(result.text).toContain("Usage:");
@@ -101,12 +142,12 @@ describe("plugin.register — command path", () => {
   it("command handler returns error when no API key", async () => {
     vi.mocked(resolveXapiApiKey).mockReturnValue({ apiKey: undefined, source: "missing" });
 
-    const registerCommand = vi.fn();
-    plugin.register({ config: {}, registerCommand });
+    const api = buildApi();
+    plugin.register(api as never);
 
-    const handler = registerCommand.mock.calls[0]![0].handler;
+    const handler = api.registerCommand.mock.calls[0]![0].handler;
     const result = await handler({
-      senderId: "u1", channel: null, isAuthorizedSender: true,
+      senderId: "u1", channel: "test", isAuthorizedSender: true,
       args: "test query", commandBody: "/search test query", config: {},
     });
     expect(result.text).toContain("API Key is required");
@@ -118,12 +159,12 @@ describe("plugin.register — command path", () => {
       { title: "R1", url: "https://r1.com", description: "D1" },
     ]);
 
-    const registerCommand = vi.fn();
-    plugin.register({ config: {}, registerCommand });
+    const api = buildApi();
+    plugin.register(api as never);
 
-    const handler = registerCommand.mock.calls[0]![0].handler;
+    const handler = api.registerCommand.mock.calls[0]![0].handler;
     const result = await handler({
-      senderId: "u1", channel: null, isAuthorizedSender: true,
+      senderId: "u1", channel: "test", isAuthorizedSender: true,
       args: "test", commandBody: "/search test", config: {},
     });
     expect(result.text).toContain("R1");
@@ -134,12 +175,12 @@ describe("plugin.register — command path", () => {
     vi.mocked(resolveXapiApiKey).mockReturnValue({ apiKey: "sk-test", source: "env" });
     vi.mocked(runXapiSearch).mockResolvedValue([]);
 
-    const registerCommand = vi.fn();
-    plugin.register({ config: {}, registerCommand });
+    const api = buildApi();
+    plugin.register(api as never);
 
-    const handler = registerCommand.mock.calls[0]![0].handler;
+    const handler = api.registerCommand.mock.calls[0]![0].handler;
     const result = await handler({
-      senderId: "u1", channel: null, isAuthorizedSender: true,
+      senderId: "u1", channel: "test", isAuthorizedSender: true,
       args: "obscure query", commandBody: "/search obscure query", config: {},
     });
     expect(result.text).toContain("No results found");
@@ -149,58 +190,49 @@ describe("plugin.register — command path", () => {
     vi.mocked(resolveXapiApiKey).mockReturnValue({ apiKey: "sk-test", source: "env" });
     vi.mocked(runXapiSearch).mockRejectedValue(new Error("network down"));
 
-    const registerCommand = vi.fn();
-    plugin.register({ config: {}, registerCommand });
+    const api = buildApi();
+    plugin.register(api as never);
 
-    const handler = registerCommand.mock.calls[0]![0].handler;
+    const handler = api.registerCommand.mock.calls[0]![0].handler;
     const result = await handler({
-      senderId: "u1", channel: null, isAuthorizedSender: true,
+      senderId: "u1", channel: "test", isAuthorizedSender: true,
       args: "test", commandBody: "/search test", config: {},
     });
     expect(result.text).toContain("Search failed");
     expect(result.text).toContain("network down");
   });
 
-  it("reads webSearch config from api.config for API key resolution", async () => {
+  it("reads webSearch config from pluginConfig", async () => {
     vi.mocked(resolveXapiApiKey).mockReturnValue({ apiKey: "sk-from-config", source: "config" });
     vi.mocked(runXapiSearch).mockResolvedValue([
       { title: "T1", url: "https://t1.com", description: "D1" },
     ]);
 
-    const registerCommand = vi.fn();
-    plugin.register({
-      config: { webSearch: { apiKey: "sk-from-config", locale: "jp" } },
-      registerCommand,
+    const api = buildApi({
+      pluginConfig: { webSearch: { apiKey: "sk-from-config", locale: "jp" } },
     });
+    plugin.register(api as never);
 
-    const handler = registerCommand.mock.calls[0]![0].handler;
+    const handler = api.registerCommand.mock.calls[0]![0].handler;
     await handler({
-      senderId: "u1", channel: null, isAuthorizedSender: true,
+      senderId: "u1", channel: "test", isAuthorizedSender: true,
       args: "test", commandBody: "/search test", config: {},
     });
 
-    // resolveXapiApiKey should have been called with the webSearch sub-config
     expect(resolveXapiApiKey).toHaveBeenCalled();
   });
 });
 
 describe("plugin.register — CLI path", () => {
   it("registers CLI with xapi-search commands", () => {
-    const registerCli = vi.fn();
-    plugin.register({ config: {}, registerCli });
+    const api = buildApi();
+    plugin.register(api as never);
 
-    expect(registerCli).toHaveBeenCalledOnce();
-    expect(registerCli.mock.calls[0]![1]).toEqual({ commands: ["xapi-search"] });
+    expect(api.registerCli).toHaveBeenCalledOnce();
+    expect(api.registerCli.mock.calls[0]![1]).toEqual({ commands: ["xapi-search"] });
   });
 
-  it("does not register CLI when registerCli is absent", () => {
-    expect(() => plugin.register({ config: {} })).not.toThrow();
-  });
-
-  // --- M5: CLI action callback execution tests ---
-
-  function buildCliProgram(registerCli: ReturnType<typeof vi.fn>) {
-    // Simulate the commander-like program structure
+  function buildCliProgram(api: ReturnType<typeof buildApi>) {
     const actions: Record<string, (...args: unknown[]) => Promise<void>> = {};
     const mockCmd = {
       command: vi.fn().mockImplementation((name: string) => {
@@ -224,8 +256,7 @@ describe("plugin.register — CLI path", () => {
       }),
     };
 
-    // Call the CLI setup callback
-    const setupFn = registerCli.mock.calls[0]![0];
+    const setupFn = api.registerCli.mock.calls[0]![0];
     setupFn({ program });
 
     return actions;
@@ -235,9 +266,9 @@ describe("plugin.register — CLI path", () => {
     vi.mocked(resolveXapiApiKey).mockReturnValue({ apiKey: undefined, source: "missing" });
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const registerCli = vi.fn();
-    plugin.register({ config: {}, registerCli });
-    const actions = buildCliProgram(registerCli);
+    const api = buildApi();
+    plugin.register(api as never);
+    const actions = buildCliProgram(api);
 
     await actions["search"]!("test query", { count: "5" });
     expect(consoleSpy).toHaveBeenCalledWith(
@@ -256,9 +287,9 @@ describe("plugin.register — CLI path", () => {
     ]);
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    const registerCli = vi.fn();
-    plugin.register({ config: {}, registerCli });
-    const actions = buildCliProgram(registerCli);
+    const api = buildApi();
+    plugin.register(api as never);
+    const actions = buildCliProgram(api);
 
     await actions["search"]!("test query", { count: "5" });
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Result 1"));
@@ -273,9 +304,9 @@ describe("plugin.register — CLI path", () => {
     vi.mocked(runXapiSearch).mockResolvedValue([]);
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    const registerCli = vi.fn();
-    plugin.register({ config: {}, registerCli });
-    const actions = buildCliProgram(registerCli);
+    const api = buildApi();
+    plugin.register(api as never);
+    const actions = buildCliProgram(api);
 
     await actions["search"]!("obscure", {});
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("No results found"));
@@ -289,9 +320,9 @@ describe("plugin.register — CLI path", () => {
     vi.mocked(runXapiSearch).mockRejectedValue(new Error("timeout"));
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const registerCli = vi.fn();
-    plugin.register({ config: {}, registerCli });
-    const actions = buildCliProgram(registerCli);
+    const api = buildApi();
+    plugin.register(api as never);
+    const actions = buildCliProgram(api);
 
     await actions["search"]!("test", {});
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("Search failed"));
@@ -306,9 +337,9 @@ describe("plugin.register — CLI path", () => {
     vi.mocked(runXapiSearch).mockResolvedValue([{ title: "test", url: "https://test.com", description: "desc" }]);
     const consoleSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
-    const registerCli = vi.fn();
-    plugin.register({ config: {}, registerCli });
-    const actions = buildCliProgram(registerCli);
+    const api = buildApi();
+    plugin.register(api as never);
+    const actions = buildCliProgram(api);
 
     await actions["status"]!();
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("connected"));
@@ -320,9 +351,9 @@ describe("plugin.register — CLI path", () => {
     vi.mocked(resolveXapiApiKey).mockReturnValue({ apiKey: undefined, source: "missing" });
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const registerCli = vi.fn();
-    plugin.register({ config: {}, registerCli });
-    const actions = buildCliProgram(registerCli);
+    const api = buildApi();
+    plugin.register(api as never);
+    const actions = buildCliProgram(api);
 
     await actions["status"]!();
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("API Key is required"));
@@ -335,9 +366,9 @@ describe("plugin.register — CLI path", () => {
     vi.mocked(runXapiSearch).mockRejectedValue(new Error("dns fail"));
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-    const registerCli = vi.fn();
-    plugin.register({ config: {}, registerCli });
-    const actions = buildCliProgram(registerCli);
+    const api = buildApi();
+    plugin.register(api as never);
+    const actions = buildCliProgram(api);
 
     await actions["status"]!();
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("unreachable"));

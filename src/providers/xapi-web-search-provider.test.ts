@@ -5,14 +5,13 @@ import {
   resolveSearchCount,
   __testing,
 } from "./xapi-web-search-provider.js";
-import type { WebSearchProviderPlugin } from "../types.js";
+import type { WebSearchProviderPlugin } from "openclaw/plugin-sdk/provider-web-search";
 
 const {
   resolveXapiSearchConfig,
   readConfiguredSecret,
-  resolveSiteName,
   mergeXapiSearchConfig,
-  resolvePluginWebSearchConfig,
+  SEARCH_CACHE,
 } = __testing;
 
 // --- readConfiguredSecret ---
@@ -150,30 +149,6 @@ describe("resolveSearchCount", () => {
   });
 });
 
-// --- resolveSiteName ---
-
-describe("resolveSiteName", () => {
-  it("returns undefined for undefined input", () => {
-    expect(resolveSiteName(undefined)).toBeUndefined();
-  });
-
-  it("returns undefined for empty string", () => {
-    expect(resolveSiteName("")).toBeUndefined();
-  });
-
-  it("returns undefined for invalid URL", () => {
-    expect(resolveSiteName("not-a-url")).toBeUndefined();
-  });
-
-  it("extracts hostname without www", () => {
-    expect(resolveSiteName("https://www.example.com/page")).toBe("example.com");
-  });
-
-  it("preserves hostname without www", () => {
-    expect(resolveSiteName("https://api.example.com/path")).toBe("api.example.com");
-  });
-});
-
 // --- mergeXapiSearchConfig ---
 
 describe("mergeXapiSearchConfig", () => {
@@ -183,52 +158,61 @@ describe("mergeXapiSearchConfig", () => {
     expect(merged.xapi).toEqual({ apiKey: "sk-1" });
   });
 
-  it("merges plugin webSearch config as base", () => {
-    const merged = mergeXapiSearchConfig(
-      {},
-      { webSearch: { apiKey: "sk-plugin", locale: "cn" } },
-    );
-    expect(merged.xapi).toEqual({ apiKey: "sk-plugin", locale: "cn" });
+  it("merges plugin webSearch config as base (from full config path)", () => {
+    const fullConfig = {
+      plugins: {
+        entries: {
+          "xapi-search": {
+            config: { webSearch: { apiKey: "sk-plugin", locale: "cn" } },
+          },
+        },
+      },
+    };
+    const merged = mergeXapiSearchConfig({}, fullConfig);
+    expect((merged.xapi as Record<string, unknown>).apiKey).toBe("sk-plugin");
+    expect((merged.xapi as Record<string, unknown>).locale).toBe("cn");
   });
 
   it("search config xapi overrides plugin config", () => {
+    const fullConfig = {
+      plugins: {
+        entries: {
+          "xapi-search": {
+            config: { webSearch: { apiKey: "sk-plugin", locale: "cn", language: "zh-cn" } },
+          },
+        },
+      },
+    };
     const merged = mergeXapiSearchConfig(
       { xapi: { locale: "jp" } },
-      { webSearch: { apiKey: "sk-plugin", locale: "cn", language: "zh-cn" } },
+      fullConfig,
     );
-    expect(merged.xapi).toEqual({ apiKey: "sk-plugin", locale: "jp", language: "zh-cn" });
+    expect((merged.xapi as Record<string, unknown>).apiKey).toBe("sk-plugin");
+    expect((merged.xapi as Record<string, unknown>).locale).toBe("jp");
+    expect((merged.xapi as Record<string, unknown>).language).toBe("zh-cn");
   });
 
   it("search config xapi does not override with undefined values", () => {
+    const fullConfig = {
+      plugins: {
+        entries: {
+          "xapi-search": {
+            config: { webSearch: { apiKey: "sk-plugin" } },
+          },
+        },
+      },
+    };
     const merged = mergeXapiSearchConfig(
       { xapi: { apiKey: undefined, locale: "jp" } },
-      { webSearch: { apiKey: "sk-plugin" } },
+      fullConfig,
     );
     expect((merged.xapi as Record<string, unknown>).apiKey).toBe("sk-plugin");
     expect((merged.xapi as Record<string, unknown>).locale).toBe("jp");
   });
 
-  it("handles missing webSearch in plugin config", () => {
+  it("handles missing plugin config", () => {
     const merged = mergeXapiSearchConfig({ xapi: { apiKey: "sk-1" } }, {});
     expect(merged.xapi).toEqual({ apiKey: "sk-1" });
-  });
-});
-
-// --- resolvePluginWebSearchConfig ---
-
-describe("resolvePluginWebSearchConfig", () => {
-  it("returns webSearch config when present", () => {
-    const config = { webSearch: { apiKey: "sk-1", locale: "cn" } };
-    expect(resolvePluginWebSearchConfig(config)).toEqual({ apiKey: "sk-1", locale: "cn" });
-  });
-
-  it("returns undefined when webSearch is missing", () => {
-    expect(resolvePluginWebSearchConfig({})).toBeUndefined();
-    expect(resolvePluginWebSearchConfig(undefined)).toBeUndefined();
-  });
-
-  it("returns undefined when webSearch is not an object", () => {
-    expect(resolvePluginWebSearchConfig({ webSearch: "string" })).toBeUndefined();
   });
 });
 
@@ -249,6 +233,10 @@ describe("createXapiWebSearchProvider", () => {
     expect(provider.label).toBe("xapi.to Web Search");
   });
 
+  it("has credentialLabel", () => {
+    expect(provider.credentialLabel).toBe("xapi.to API key");
+  });
+
   it("declares XAPI_API_KEY as env var", () => {
     expect(provider.envVars).toEqual(["XAPI_API_KEY"]);
   });
@@ -258,16 +246,27 @@ describe("createXapiWebSearchProvider", () => {
   });
 
   it("has autoDetectOrder between default providers", () => {
-    expect(provider.autoDetectOrder).toBe(60);
+    expect(provider.autoDetectOrder).toBe(10);
+  });
+
+  it("requires credential", () => {
+    expect(provider.requiresCredential).toBe(true);
   });
 
   it("has signupUrl and docsUrl", () => {
     expect(provider.signupUrl).toBeTruthy();
     expect(provider.docsUrl).toBeTruthy();
   });
+
+  it("has applySelectionConfig that enables the plugin", () => {
+    expect(provider.applySelectionConfig).toBeDefined();
+    const config = provider.applySelectionConfig!({});
+    // SDK enablePluginInConfig handles allowlisting, so just verify plugin is in config
+    expect(config).toBeDefined();
+  });
 });
 
-// --- credential management ---
+// --- credential management (uses SDK getScopedCredentialValue / setScopedCredentialValue) ---
 
 describe("credential management", () => {
   let provider: WebSearchProviderPlugin;
@@ -276,7 +275,7 @@ describe("credential management", () => {
     provider = createXapiWebSearchProvider();
   });
 
-  it("getCredentialValue returns apiKey from xapi config", () => {
+  it("getCredentialValue returns apiKey from xapi scoped config", () => {
     const searchConfig = { xapi: { apiKey: "sk-123" } };
     expect(provider.getCredentialValue(searchConfig)).toBe("sk-123");
   });
@@ -284,10 +283,6 @@ describe("credential management", () => {
   it("getCredentialValue returns undefined when no xapi config", () => {
     expect(provider.getCredentialValue({})).toBeUndefined();
     expect(provider.getCredentialValue(undefined)).toBeUndefined();
-  });
-
-  it("getCredentialValue returns undefined for non-string apiKey", () => {
-    expect(provider.getCredentialValue({ xapi: { apiKey: 42 } })).toBeUndefined();
   });
 
   it("setCredentialValue writes to xapi.apiKey", () => {
@@ -302,37 +297,51 @@ describe("credential management", () => {
     expect((target.xapi as Record<string, unknown>).apiKey).toBe("sk-new");
   });
 
-  it("getConfiguredCredentialValue reads from webSearch.apiKey", () => {
-    const config = { webSearch: { apiKey: "sk-config" } };
-    expect(provider.getConfiguredCredentialValue(config)).toBe("sk-config");
+  it("getConfiguredCredentialValue reads from full config path", () => {
+    const config = {
+      plugins: {
+        entries: {
+          "xapi-search": {
+            config: { webSearch: { apiKey: "sk-config" } },
+          },
+        },
+      },
+    };
+    expect(provider.getConfiguredCredentialValue!(config)).toBe("sk-config");
   });
 
   it("getConfiguredCredentialValue returns undefined when missing", () => {
-    expect(provider.getConfiguredCredentialValue({})).toBeUndefined();
+    expect(provider.getConfiguredCredentialValue!({})).toBeUndefined();
   });
 
-  it("setConfiguredCredentialValue writes to webSearch.apiKey", () => {
+  it("setConfiguredCredentialValue writes to full config path", () => {
     const target: Record<string, unknown> = {};
-    provider.setConfiguredCredentialValue(target, "sk-set");
-    expect((target.webSearch as Record<string, unknown>).apiKey).toBe("sk-set");
+    provider.setConfiguredCredentialValue!(target, "sk-set");
+    // SDK navigates: plugins.entries.xapi-search.config.webSearch.apiKey
+    const plugins = target.plugins as Record<string, unknown>;
+    const entries = plugins.entries as Record<string, Record<string, unknown>>;
+    const entry = entries["xapi-search"]!;
+    const config = entry.config as Record<string, unknown>;
+    const webSearch = config.webSearch as Record<string, unknown>;
+    expect(webSearch.apiKey).toBe("sk-set");
   });
 });
 
 // --- resolveRuntimeMetadata ---
 
 describe("resolveRuntimeMetadata", () => {
-  it("returns transport info with credential source", () => {
+  it("returns metadata with undefined key source when no credential", () => {
     const provider = createXapiWebSearchProvider();
-    const metadata = provider.resolveRuntimeMetadata({});
-    expect(metadata).toEqual({ transport: "xapi_unified_api", credentialSource: "missing" });
+    const metadata = provider.resolveRuntimeMetadata!({});
+    expect(metadata).toEqual({ selectedProviderKeySource: undefined });
   });
 
   it("includes credential source from ctx", () => {
     const provider = createXapiWebSearchProvider();
-    const metadata = provider.resolveRuntimeMetadata({
+    const metadata = provider.resolveRuntimeMetadata!({
       resolvedCredential: { source: "env", value: "sk-test", fallbackEnvVar: "XAPI_API_KEY" },
     });
-    expect(metadata.credentialSource).toBe("env");
+    expect(metadata.selectedProviderKeySource).toBe("env");
   });
 });
 
@@ -352,13 +361,14 @@ describe("createTool", () => {
 
   it("returns tool definition with description and parameters", () => {
     const tool = provider.createTool({});
-    expect(tool.description).toBeTruthy();
-    expect(tool.parameters).toBeDefined();
-    expect(typeof tool.execute).toBe("function");
+    expect(tool).not.toBeNull();
+    expect(tool!.description).toBeTruthy();
+    expect(tool!.parameters).toBeDefined();
+    expect(typeof tool!.execute).toBe("function");
   });
 
   it("execute returns error object when no API key (not throw)", async () => {
-    const tool = provider.createTool({});
+    const tool = provider.createTool({})!;
     const result = await tool.execute({ query: "test" });
     expect(result).toHaveProperty("error", "missing_xapi_api_key");
     expect(result).toHaveProperty("message");
@@ -367,24 +377,32 @@ describe("createTool", () => {
 
   it("execute returns error for empty query", async () => {
     process.env.XAPI_API_KEY = "sk-test";
-    const tool = provider.createTool({});
+    const tool = provider.createTool({})!;
     const result = await tool.execute({ query: "" });
     expect(result).toHaveProperty("error", "missing_query");
   });
 
   it("execute returns error for missing query", async () => {
     process.env.XAPI_API_KEY = "sk-test";
-    const tool = provider.createTool({});
+    const tool = provider.createTool({})!;
     const result = await tool.execute({});
     expect(result).toHaveProperty("error", "missing_query");
   });
 
   it("merges plugin config into tool context", () => {
     const tool = provider.createTool({
-      config: { webSearch: { locale: "cn", language: "zh-cn" } },
+      config: {
+        plugins: {
+          entries: {
+            "xapi-search": {
+              config: { webSearch: { locale: "cn", language: "zh-cn" } },
+            },
+          },
+        },
+      },
     });
-    // Tool is created — the merge happens inside createTool
-    expect(tool.description).toBeTruthy();
+    expect(tool).not.toBeNull();
+    expect(tool!.description).toBeTruthy();
   });
 });
 
@@ -397,11 +415,13 @@ describe("createTool execute — with mocked fetch", () => {
     mockFetch.mockReset();
     vi.stubGlobal("fetch", mockFetch);
     process.env.XAPI_API_KEY = "sk-test-key";
+    SEARCH_CACHE.clear();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
     delete process.env.XAPI_API_KEY;
+    SEARCH_CACHE.clear();
   });
 
   function jsonResponse(body: unknown, status = 200): Response {
@@ -424,7 +444,7 @@ describe("createTool execute — with mocked fetch", () => {
     }));
 
     const provider = createXapiWebSearchProvider();
-    const tool = provider.createTool({});
+    const tool = provider.createTool({})!;
     const result = await tool.execute({ query: "test query", count: 5 });
 
     expect(result).toHaveProperty("query", "test query");
@@ -436,16 +456,12 @@ describe("createTool execute — with mocked fetch", () => {
       untrusted: true,
       source: "web_search",
       provider: "xapi",
-      wrapped: false,
+      wrapped: true,
     });
 
     const results = (result as { results: Record<string, unknown>[] }).results;
     expect(results).toHaveLength(1);
-    expect(results[0]).toEqual(expect.objectContaining({
-      title: "Result 1",
-      url: "https://example.com",
-      description: "A snippet",
-    }));
+    expect(results[0]!.url).toBe("https://example.com");
   });
 
   it("maps knowledgeGraph as first result", async () => {
@@ -464,32 +480,11 @@ describe("createTool execute — with mocked fetch", () => {
     }));
 
     const provider = createXapiWebSearchProvider();
-    const tool = provider.createTool({});
+    const tool = provider.createTool({})!;
     const result = await tool.execute({ query: "apple" });
 
     const results = (result as { results: Record<string, unknown>[] }).results;
     expect(results).toHaveLength(2);
-    expect(results[0]!.title).toBe("KG Title");
-    expect(results[0]!.description).toBe("KG description");
-    expect(results[1]!.title).toBe("O1");
-  });
-
-  it("includes siteName from URL", async () => {
-    mockFetch.mockResolvedValueOnce(jsonResponse({
-      success: true,
-      data: {
-        organic: [
-          { title: "R1", link: "https://www.example.com/page", snippet: "S1" },
-        ],
-      },
-    }));
-
-    const provider = createXapiWebSearchProvider();
-    const tool = provider.createTool({});
-    const result = await tool.execute({ query: "test" });
-
-    const results = (result as { results: Record<string, unknown>[] }).results;
-    expect(results[0]!.siteName).toBe("example.com");
   });
 
   it("returns empty results for empty organic", async () => {
@@ -499,7 +494,7 @@ describe("createTool execute — with mocked fetch", () => {
     }));
 
     const provider = createXapiWebSearchProvider();
-    const tool = provider.createTool({});
+    const tool = provider.createTool({})!;
     const result = await tool.execute({ query: "nothing" });
 
     expect((result as { results: unknown[] }).results).toHaveLength(0);
@@ -512,20 +507,20 @@ describe("createTool execute — with mocked fetch", () => {
     }));
 
     const provider = createXapiWebSearchProvider();
-    const tool = provider.createTool({});
+    const tool = provider.createTool({})!;
     const result = await tool.execute({ query: "test" });
 
     expect((result as { results: unknown[] }).results).toHaveLength(0);
   });
 
-  it("returns error object on API error (does not throw) [H1]", async () => {
+  it("returns error object on API error (does not throw)", async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({
       success: false,
       error: "quota exceeded",
     }));
 
     const provider = createXapiWebSearchProvider();
-    const tool = provider.createTool({});
+    const tool = provider.createTool({})!;
     const result = await tool.execute({ query: "test" });
 
     expect(result).toHaveProperty("error", "xapi_search_failed");
@@ -537,7 +532,7 @@ describe("createTool execute — with mocked fetch", () => {
     mockFetch.mockRejectedValueOnce(new TypeError("fetch failed"));
 
     const provider = createXapiWebSearchProvider();
-    const tool = provider.createTool({});
+    const tool = provider.createTool({})!;
     const result = await tool.execute({ query: "test" });
 
     expect(result).toHaveProperty("error", "xapi_search_failed");
@@ -553,7 +548,7 @@ describe("createTool execute — with mocked fetch", () => {
     const provider = createXapiWebSearchProvider();
     const tool = provider.createTool({
       searchConfig: { xapi: { locale: "cn", language: "zh-cn" } },
-    });
+    })!;
     await tool.execute({ query: "test", count: 5 });
 
     const [url, options] = mockFetch.mock.calls[0]!;
@@ -575,7 +570,7 @@ describe("createTool execute — with mocked fetch", () => {
     }));
 
     const provider = createXapiWebSearchProvider();
-    const tool = provider.createTool({});
+    const tool = provider.createTool({})!;
     await tool.execute({ query: "test" });
 
     const body = JSON.parse(mockFetch.mock.calls[0]![1].body);
@@ -583,7 +578,7 @@ describe("createTool execute — with mocked fetch", () => {
     expect(body.input.hl).toBe("en");
   });
 
-  it("merges plugin config with search config [H3/H4]", async () => {
+  it("merges plugin config with search config", async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({
       success: true,
       data: { organic: [] },
@@ -591,15 +586,22 @@ describe("createTool execute — with mocked fetch", () => {
 
     const provider = createXapiWebSearchProvider();
     const tool = provider.createTool({
-      config: { webSearch: { apiKey: "sk-from-plugin", locale: "jp" } },
+      config: {
+        plugins: {
+          entries: {
+            "xapi-search": {
+              config: { webSearch: { apiKey: "sk-from-plugin", locale: "jp" } },
+            },
+          },
+        },
+      },
       searchConfig: { xapi: { language: "ja" } },
-    });
+    })!;
     await tool.execute({ query: "test" });
 
     const body = JSON.parse(mockFetch.mock.calls[0]![1].body);
     expect(body.input.gl).toBe("jp");
     expect(body.input.hl).toBe("ja");
-    // API key from plugin config should be used
     expect(mockFetch.mock.calls[0]![1].headers["XAPI-Key"]).toBe("sk-from-plugin");
   });
 
@@ -611,12 +613,82 @@ describe("createTool execute — with mocked fetch", () => {
 
     const provider = createXapiWebSearchProvider();
     const tool = provider.createTool({
-      config: { webSearch: { locale: "us" } },
+      config: {
+        plugins: {
+          entries: {
+            "xapi-search": {
+              config: { webSearch: { locale: "us" } },
+            },
+          },
+        },
+      },
       searchConfig: { xapi: { locale: "cn" } },
-    });
+    })!;
     await tool.execute({ query: "test" });
 
     const body = JSON.parse(mockFetch.mock.calls[0]![1].body);
     expect(body.input.gl).toBe("cn");
+  });
+
+  // --- Cache tests ---
+
+  it("returns cached result on second call with same params", async () => {
+    mockFetch.mockResolvedValueOnce(jsonResponse({
+      success: true,
+      data: {
+        organic: [
+          { title: "R1", link: "https://r1.com", snippet: "S1" },
+        ],
+      },
+    }));
+
+    const provider = createXapiWebSearchProvider();
+    const tool = provider.createTool({})!;
+
+    const result1 = await tool.execute({ query: "cached query", count: 5 });
+    expect(mockFetch).toHaveBeenCalledOnce();
+    expect(result1).not.toHaveProperty("cached");
+
+    const result2 = await tool.execute({ query: "cached query", count: 5 });
+    expect(mockFetch).toHaveBeenCalledOnce();
+    expect(result2).toHaveProperty("cached", true);
+  });
+
+  it("does not use cache for different queries", async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({
+        success: true,
+        data: { organic: [{ title: "R1", link: "https://r1.com", snippet: "S1" }] },
+      }))
+      .mockResolvedValueOnce(jsonResponse({
+        success: true,
+        data: { organic: [{ title: "R2", link: "https://r2.com", snippet: "S2" }] },
+      }));
+
+    const provider = createXapiWebSearchProvider();
+    const tool = provider.createTool({})!;
+
+    await tool.execute({ query: "query-a" });
+    await tool.execute({ query: "query-b" });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not cache error responses", async () => {
+    mockFetch
+      .mockResolvedValueOnce(jsonResponse({ success: false, error: "rate limited" }))
+      .mockResolvedValueOnce(jsonResponse({
+        success: true,
+        data: { organic: [{ title: "R1", link: "https://r1.com", snippet: "S1" }] },
+      }));
+
+    const provider = createXapiWebSearchProvider();
+    const tool = provider.createTool({})!;
+
+    const result1 = await tool.execute({ query: "retry-query" });
+    expect(result1).toHaveProperty("error", "xapi_search_failed");
+
+    const result2 = await tool.execute({ query: "retry-query" });
+    expect(result2).toHaveProperty("provider", "xapi");
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });

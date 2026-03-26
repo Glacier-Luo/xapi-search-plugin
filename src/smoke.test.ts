@@ -34,7 +34,7 @@ describe.skipIf(SKIP)("smoke: real xapi.to API via provider", () => {
       untrusted: true,
       source: "web_search",
       provider: "xapi",
-      wrapped: false,
+      wrapped: true,
     });
 
     // Verify results array

@@ -19,9 +19,10 @@
   "files": [
     "index.ts",
     "src/index.ts",
-    "src/types.ts",
     "src/lib/xapi-client.ts",
     "src/providers/xapi-web-search-provider.ts",
+    "src/tools/xapi-search-tool.ts",
+    "skills",
     "dist",
     "openclaw.plugin.json"
   ],
@@ -41,7 +42,7 @@
   ],
   "license": "MIT",
   "peerDependencies": {
-    "openclaw": ">=2026.3.7"
+    "openclaw": "^2026.3.23"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.0"

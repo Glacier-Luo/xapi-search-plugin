@@ -1,13 +1,24 @@
 import { Type } from "@sinclair/typebox";
+import {
+  enablePluginInConfig,
+  getScopedCredentialValue,
+  setScopedCredentialValue,
+  resolveProviderWebSearchPluginConfig,
+  setProviderWebSearchPluginConfigValue,
+  wrapWebContent,
+  readCache,
+  writeCache,
+  normalizeCacheKey,
+  resolveSiteName,
+} from "openclaw/plugin-sdk/provider-web-search";
 import { createXapiClient } from "../lib/xapi-client.js";
 import type {
   SearchConfigRecord,
   WebSearchProviderPlugin,
   WebSearchProviderToolDefinition,
   WebSearchCredentialResolutionSource,
-  RuntimeMetadataContext,
-  ToolCreationContext,
-} from "../types.js";
+} from "openclaw/plugin-sdk/provider-web-search";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/plugin-entry";
 
 // --- xapi.to API response types (verified against actual response) ---
 
@@ -58,6 +69,14 @@ export const DEFAULT_LANGUAGE = "en";
 export const DEFAULT_SEARCH_COUNT = 10;
 export const MAX_SEARCH_COUNT = 20;
 export const DEFAULT_TIMEOUT_SECONDS = 15;
+const DEFAULT_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+// --- Cache (using SDK readCache/writeCache with a local Map) ---
+
+const SEARCH_CACHE = new Map<
+  string,
+  { value: Record<string, unknown>; expiresAt: number; insertedAt: number }
+>();
 
 // --- Configuration resolution ---
 
@@ -76,16 +95,13 @@ function resolveXapiSearchConfig(searchConfig?: SearchConfigRecord): XapiSearchC
 
 /**
  * Read a configured secret value that may be a plain string or a secret
- * reference object. When the SDK is available, replace with:
- *   import { readConfiguredSecretString } from "openclaw/plugin-sdk/provider-web-search";
+ * reference object. Simpler version of SDK's readConfiguredSecretString
+ * (which requires a path parameter for diagnostics).
  */
 function readConfiguredSecret(value: unknown): string | undefined {
   if (typeof value === "string") {
     return value.trim() || undefined;
   }
-  // Secret reference objects (e.g. { $ref: "vault://..." }) are resolved
-  // by the host before reaching the plugin. If we still see an object here,
-  // it means resolution hasn't happened yet — return undefined.
   return undefined;
 }
 
@@ -105,40 +121,28 @@ export function resolveXapiApiKey(
   return { apiKey: undefined, source: "missing" };
 }
 
+/**
+ * Clamp count to [1, MAX_SEARCH_COUNT]. The SDK's resolveSearchCount caps at 10;
+ * xapi.to supports up to 20, so we keep our own implementation.
+ */
 export function resolveSearchCount(count: unknown, fallback: number): number {
   const n = count != null ? Number(count) : fallback;
   return Math.min(Math.max(Number.isFinite(n) ? n : fallback, 1), MAX_SEARCH_COUNT);
 }
 
-function resolveSiteName(url?: string): string | undefined {
-  if (!url) return undefined;
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return undefined;
-  }
-}
-
 // --- Config merging ---
 
 /**
- * Merge scoped search config (from global search settings) with plugin-level
- * config (from openclaw.json plugins.entries.xapi-search.config).
- *
- * Plugin config is the base; search config's `xapi` section overrides.
- *
- * When the SDK is available, replace with:
- *   import { mergeScopedSearchConfig } from "openclaw/plugin-sdk/provider-web-search";
+ * Merge scoped search config (searchConfig.xapi) with plugin-level config
+ * (resolved from full OpenClawConfig via SDK). Plugin config is the base;
+ * search config's `xapi` section overrides.
  */
 function mergeXapiSearchConfig(
   searchConfig?: SearchConfigRecord,
-  pluginConfig?: Record<string, unknown>,
+  fullConfig?: OpenClawConfig,
 ): SearchConfigRecord {
   const fromSearch = resolveXapiSearchConfig(searchConfig);
-  const webSearch = pluginConfig?.webSearch;
-  const fromPlugin = webSearch && typeof webSearch === "object" && !Array.isArray(webSearch)
-    ? (webSearch as Record<string, unknown>)
-    : {};
+  const fromPlugin = resolveProviderWebSearchPluginConfig(fullConfig, "xapi-search") ?? {};
 
   // Plugin config is base, search config overrides
   const merged: Record<string, unknown> = { ...fromPlugin };
@@ -152,22 +156,6 @@ function mergeXapiSearchConfig(
     ...searchConfig,
     xapi: merged,
   };
-}
-
-/**
- * Read xapi-search plugin config from the full plugin config object.
- *
- * When the SDK is available, replace with:
- *   import { resolveProviderWebSearchPluginConfig } from "openclaw/plugin-sdk/provider-web-search";
- */
-function resolvePluginWebSearchConfig(
-  config?: Record<string, unknown>,
-): XapiSearchConfig | undefined {
-  const webSearch = config?.webSearch;
-  if (webSearch && typeof webSearch === "object" && !Array.isArray(webSearch)) {
-    return webSearch as XapiSearchConfig;
-  }
-  return undefined;
 }
 
 // --- Search result type ---
@@ -212,9 +200,9 @@ export async function runXapiSearch(params: {
 
   if (data.knowledgeGraph?.title && data.knowledgeGraph.description) {
     results.push({
-      title: data.knowledgeGraph.title,
+      title: wrapWebContent(data.knowledgeGraph.title, "web_search"),
       url: data.knowledgeGraph.descriptionLink ?? "",
-      description: data.knowledgeGraph.description,
+      description: wrapWebContent(data.knowledgeGraph.description, "web_search"),
       siteName: resolveSiteName(data.knowledgeGraph.descriptionLink),
     });
   }
@@ -222,9 +210,9 @@ export async function runXapiSearch(params: {
   if (data.organic) {
     for (const item of data.organic) {
       results.push({
-        title: item.title,
+        title: wrapWebContent(item.title, "web_search"),
         url: item.link,
-        description: item.snippet,
+        description: wrapWebContent(item.snippet, "web_search"),
         published: item.date,
         siteName: resolveSiteName(item.link),
       });
@@ -282,9 +270,24 @@ function createXapiToolDefinition(
       }
 
       const count = resolveSearchCount(params.count, DEFAULT_SEARCH_COUNT);
+
+      // --- Cache lookup ---
+      const cacheKey = normalizeCacheKey(
+        JSON.stringify({
+          type: "xapi-search",
+          q: query,
+          count,
+          locale,
+          language,
+        }),
+      );
+      const cached = readCache(SEARCH_CACHE, cacheKey);
+      if (cached) {
+        return { ...cached.value, cached: true };
+      }
+
       const start = Date.now();
 
-      // H1 fix: catch API errors and return error objects instead of throwing
       try {
         const results = await runXapiSearch({
           query,
@@ -295,7 +298,7 @@ function createXapiToolDefinition(
           timeoutSeconds: DEFAULT_TIMEOUT_SECONDS,
         });
 
-        return {
+        const result: Record<string, unknown> = {
           query,
           provider: "xapi",
           count: results.length,
@@ -304,12 +307,15 @@ function createXapiToolDefinition(
             untrusted: true,
             source: "web_search",
             provider: "xapi",
-            // Not using wrapWebContent yet — set wrapped: false.
-            // When SDK is available, wrap content and set wrapped: true.
-            wrapped: false,
+            wrapped: true,
           },
           results,
         };
+
+        // --- Cache write ---
+        writeCache(SEARCH_CACHE, cacheKey, result, DEFAULT_CACHE_TTL_MS);
+
+        return result;
       } catch (err) {
         return {
           error: "xapi_search_failed",
@@ -329,41 +335,37 @@ export function createXapiWebSearchProvider(): WebSearchProviderPlugin {
     id: "xapi-search",
     label: "xapi.to Web Search",
     hint: "Web search via xapi.to unified API",
+    requiresCredential: true,
+    credentialLabel: "xapi.to API key",
     envVars: ["XAPI_API_KEY"],
     placeholder: "sk-...",
     signupUrl: "https://xapi.to",
     docsUrl: "https://xapi.to",
-    autoDetectOrder: 60,
+    autoDetectOrder: 10,
 
     credentialPath: "plugins.entries.xapi-search.config.webSearch.apiKey",
     inactiveSecretPaths: ["plugins.entries.xapi-search.config.webSearch.apiKey"],
 
-    getCredentialValue: (searchConfig) => {
-      const xapi = resolveXapiSearchConfig(searchConfig);
-      return readConfiguredSecret(xapi.apiKey);
-    },
-    setCredentialValue: (searchConfigTarget, value) => {
-      if (!searchConfigTarget.xapi || typeof searchConfigTarget.xapi !== "object" || Array.isArray(searchConfigTarget.xapi)) {
-        searchConfigTarget.xapi = {};
-      }
-      (searchConfigTarget.xapi as Record<string, unknown>).apiKey = value;
-    },
-    getConfiguredCredentialValue: (config) => {
-      return readConfiguredSecret(resolvePluginWebSearchConfig(config)?.apiKey);
-    },
-    setConfiguredCredentialValue: (configTarget, value) => {
-      if (!configTarget.webSearch || typeof configTarget.webSearch !== "object" || Array.isArray(configTarget.webSearch)) {
-        configTarget.webSearch = {};
-      }
-      (configTarget.webSearch as Record<string, unknown>).apiKey = value;
-    },
+    // Credential from scoped search config (searchConfig.xapi.apiKey)
+    getCredentialValue: (searchConfig) =>
+      getScopedCredentialValue(searchConfig, "xapi"),
+    setCredentialValue: (searchConfigTarget, value) =>
+      setScopedCredentialValue(searchConfigTarget, "xapi", value),
 
-    resolveRuntimeMetadata: (ctx: RuntimeMetadataContext) => ({
-      transport: "xapi_unified_api",
-      credentialSource: ctx.resolvedCredential?.source ?? "missing",
+    // Credential from full OpenClawConfig (plugins.entries.xapi-search.config.webSearch.apiKey)
+    getConfiguredCredentialValue: (config) =>
+      resolveProviderWebSearchPluginConfig(config, "xapi-search")?.apiKey,
+    setConfiguredCredentialValue: (configTarget, value) =>
+      setProviderWebSearchPluginConfigValue(configTarget, "xapi-search", "apiKey", value),
+
+    applySelectionConfig: (config) =>
+      enablePluginInConfig(config, "xapi-search").config,
+
+    resolveRuntimeMetadata: (ctx) => ({
+      selectedProviderKeySource: ctx.resolvedCredential?.source,
     }),
 
-    createTool: (ctx: ToolCreationContext) =>
+    createTool: (ctx) =>
       createXapiToolDefinition(
         mergeXapiSearchConfig(ctx.searchConfig, ctx.config),
       ),
@@ -375,9 +377,8 @@ export function createXapiWebSearchProvider(): WebSearchProviderPlugin {
 export const __testing = {
   resolveXapiSearchConfig,
   readConfiguredSecret,
-  resolveSiteName,
   mergeXapiSearchConfig,
-  resolvePluginWebSearchConfig,
   createXapiToolDefinition,
   createXapiSchema,
+  SEARCH_CACHE,
 } as const;
