@@ -66,11 +66,11 @@ describe("resolveXapiSearchConfig", () => {
 
 describe("resolveXapiApiKey", () => {
   beforeEach(() => {
-    delete process.env.XAPI_API_KEY;
+    delete process.env.XAPI_KEY;
   });
 
   afterEach(() => {
-    delete process.env.XAPI_API_KEY;
+    delete process.env.XAPI_KEY;
   });
 
   it("returns config source when apiKey is string in config", () => {
@@ -78,14 +78,14 @@ describe("resolveXapiApiKey", () => {
     expect(result).toEqual({ apiKey: "sk-from-config", source: "config" });
   });
 
-  it("returns env source when XAPI_API_KEY is set", () => {
-    process.env.XAPI_API_KEY = "sk-from-env";
+  it("returns env source when XAPI_KEY is set", () => {
+    process.env.XAPI_KEY = "sk-from-env";
     const result = resolveXapiApiKey({});
-    expect(result).toEqual({ apiKey: "sk-from-env", source: "env", fallbackEnvVar: "XAPI_API_KEY" });
+    expect(result).toEqual({ apiKey: "sk-from-env", source: "env", fallbackEnvVar: "XAPI_KEY" });
   });
 
   it("prefers config over env", () => {
-    process.env.XAPI_API_KEY = "sk-from-env";
+    process.env.XAPI_KEY = "sk-from-env";
     const result = resolveXapiApiKey({ apiKey: "sk-from-config" });
     expect(result.apiKey).toBe("sk-from-config");
     expect(result.source).toBe("config");
@@ -237,8 +237,8 @@ describe("createXapiWebSearchProvider", () => {
     expect(provider.credentialLabel).toBe("xapi.to API key");
   });
 
-  it("declares XAPI_API_KEY as env var", () => {
-    expect(provider.envVars).toEqual(["XAPI_API_KEY"]);
+  it("declares XAPI_KEY as env var", () => {
+    expect(provider.envVars).toEqual(["XAPI_KEY"]);
   });
 
   it("has credentialPath pointing to plugin config", () => {
@@ -339,7 +339,7 @@ describe("resolveRuntimeMetadata", () => {
   it("includes credential source from ctx", () => {
     const provider = createXapiWebSearchProvider();
     const metadata = provider.resolveRuntimeMetadata!({
-      resolvedCredential: { source: "env", value: "sk-test", fallbackEnvVar: "XAPI_API_KEY" },
+      resolvedCredential: { source: "env", value: "sk-test", fallbackEnvVar: "XAPI_KEY" },
     });
     expect(metadata.selectedProviderKeySource).toBe("env");
   });
@@ -352,11 +352,11 @@ describe("createTool", () => {
 
   beforeEach(() => {
     provider = createXapiWebSearchProvider();
-    delete process.env.XAPI_API_KEY;
+    delete process.env.XAPI_KEY;
   });
 
   afterEach(() => {
-    delete process.env.XAPI_API_KEY;
+    delete process.env.XAPI_KEY;
   });
 
   it("returns tool definition with description and parameters", () => {
@@ -370,20 +370,20 @@ describe("createTool", () => {
   it("execute returns error object when no API key (not throw)", async () => {
     const tool = provider.createTool({})!;
     const result = await tool.execute({ query: "test" });
-    expect(result).toHaveProperty("error", "missing_xapi_api_key");
+    expect(result).toHaveProperty("error", "missing_xapi_key");
     expect(result).toHaveProperty("message");
     expect(result).toHaveProperty("docs");
   });
 
   it("execute returns error for empty query", async () => {
-    process.env.XAPI_API_KEY = "sk-test";
+    process.env.XAPI_KEY = "sk-test";
     const tool = provider.createTool({})!;
     const result = await tool.execute({ query: "" });
     expect(result).toHaveProperty("error", "missing_query");
   });
 
   it("execute returns error for missing query", async () => {
-    process.env.XAPI_API_KEY = "sk-test";
+    process.env.XAPI_KEY = "sk-test";
     const tool = provider.createTool({})!;
     const result = await tool.execute({});
     expect(result).toHaveProperty("error", "missing_query");
@@ -414,13 +414,13 @@ describe("createTool execute — with mocked fetch", () => {
   beforeEach(() => {
     mockFetch.mockReset();
     vi.stubGlobal("fetch", mockFetch);
-    process.env.XAPI_API_KEY = "sk-test-key";
+    process.env.XAPI_KEY = "sk-test-key";
     SEARCH_CACHE.clear();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
-    delete process.env.XAPI_API_KEY;
+    delete process.env.XAPI_KEY;
     SEARCH_CACHE.clear();
   });
 

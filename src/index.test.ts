@@ -76,12 +76,12 @@ function buildApi(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  delete process.env.XAPI_API_KEY;
+  delete process.env.XAPI_KEY;
   process.exitCode = 0;
 });
 
 afterEach(() => {
-  delete process.env.XAPI_API_KEY;
+  delete process.env.XAPI_KEY;
   process.exitCode = 0;
 });
 

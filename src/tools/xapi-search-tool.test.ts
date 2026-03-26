@@ -302,7 +302,7 @@ describe("createXapiSearchTool", () => {
 
     const result = await tool.execute("call-1", { query: "test" });
     expect(result).toEqual(
-      expect.objectContaining({ error: "missing_xapi_api_key" }),
+      expect.objectContaining({ error: "missing_xapi_key" }),
     );
   });
 

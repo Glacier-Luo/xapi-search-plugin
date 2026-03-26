@@ -47,7 +47,7 @@ export default definePluginEntry({
 
         const auth = resolveXapiApiKey(pluginXapiConfig);
         if (!auth.apiKey) {
-          return { text: "xapi.to API Key is required. Set XAPI_API_KEY env var or configure webSearch.apiKey." };
+          return { text: "xapi.to API Key is required. Set XAPI_KEY env var or configure webSearch.apiKey." };
         }
 
         try {
@@ -86,7 +86,7 @@ export default definePluginEntry({
           .action(async (query: unknown, opts: unknown) => {
             const auth = resolveXapiApiKey(pluginXapiConfig);
             if (!auth.apiKey) {
-              console.error("xapi.to API Key is required. Set XAPI_API_KEY env var or configure webSearch.apiKey.");
+              console.error("xapi.to API Key is required. Set XAPI_KEY env var or configure webSearch.apiKey.");
               process.exitCode = 1;
               return;
             }
@@ -123,7 +123,7 @@ export default definePluginEntry({
           .action(async () => {
             const auth = resolveXapiApiKey(pluginXapiConfig);
             if (!auth.apiKey) {
-              console.error("xapi.to API Key is required. Set XAPI_API_KEY env var or configure webSearch.apiKey.");
+              console.error("xapi.to API Key is required. Set XAPI_KEY env var or configure webSearch.apiKey.");
               process.exitCode = 1;
               return;
             }

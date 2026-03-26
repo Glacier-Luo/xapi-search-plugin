@@ -113,9 +113,9 @@ export function resolveXapiApiKey(
     return { apiKey: fromConfig, source: "config" };
   }
 
-  const fromEnv = process.env.XAPI_API_KEY?.trim();
+  const fromEnv = process.env.XAPI_KEY?.trim();
   if (fromEnv) {
-    return { apiKey: fromEnv, source: "env", fallbackEnvVar: "XAPI_API_KEY" };
+    return { apiKey: fromEnv, source: "env", fallbackEnvVar: "XAPI_KEY" };
   }
 
   return { apiKey: undefined, source: "missing" };
@@ -252,9 +252,9 @@ function createXapiToolDefinition(
       const auth = resolveXapiApiKey(xapiConfig);
       if (!auth.apiKey) {
         return {
-          error: "missing_xapi_api_key",
+          error: "missing_xapi_key",
           message:
-            "web_search (xapi) needs an API key. Set XAPI_API_KEY in the environment, or configure plugins.entries.xapi-search.config.webSearch.apiKey.",
+            "web_search (xapi) needs an API key. Set XAPI_KEY in the environment, or configure plugins.entries.xapi-search.config.webSearch.apiKey.",
           docs: "https://xapi.to",
         };
       }
@@ -337,7 +337,7 @@ export function createXapiWebSearchProvider(): WebSearchProviderPlugin {
     hint: "Web search via xapi.to unified API",
     requiresCredential: true,
     credentialLabel: "xapi.to API key",
-    envVars: ["XAPI_API_KEY"],
+    envVars: ["XAPI_KEY"],
     placeholder: "sk-...",
     signupUrl: "https://xapi.to",
     docsUrl: "https://xapi.to",

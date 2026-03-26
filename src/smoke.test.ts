@@ -2,15 +2,15 @@
  * Smoke test — calls the real xapi.to API.
  *
  * Skipped by default. To run:
- *   XAPI_API_KEY=sk-xxx npx vitest run src/smoke.test.ts
+ *   XAPI_KEY=sk-xxx npx vitest run src/smoke.test.ts
  *
  * Or explicitly:
- *   XAPI_API_KEY=sk-xxx SMOKE=1 npx vitest run
+ *   XAPI_KEY=sk-xxx SMOKE=1 npx vitest run
  */
 import { describe, it, expect } from "vitest";
 import { createXapiWebSearchProvider } from "./providers/xapi-web-search-provider.js";
 
-const SKIP = !process.env.XAPI_API_KEY || !process.env.SMOKE;
+const SKIP = !process.env.XAPI_KEY || !process.env.SMOKE;
 
 describe.skipIf(SKIP)("smoke: real xapi.to API via provider", () => {
   it("createTool execute returns structured results", async () => {

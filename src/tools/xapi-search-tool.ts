@@ -214,9 +214,9 @@ export function createXapiSearchTool(api: OpenClawPluginApi) {
       const auth = resolveXapiApiKey(webSearchConfig);
       if (!auth.apiKey) {
         return jsonResult({
-          error: "missing_xapi_api_key",
+          error: "missing_xapi_key",
           message:
-            "xapi.to API Key is required. Set XAPI_API_KEY env var or configure webSearch.apiKey.",
+            "xapi.to API Key is required. Set XAPI_KEY env var or configure webSearch.apiKey.",
           docs: "https://xapi.to",
         });
       }

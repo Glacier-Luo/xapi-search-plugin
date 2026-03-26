@@ -13,6 +13,32 @@ metadata:
 
 # xapi.to Search Tools
 
+## Setup
+
+An API key from [xapi.to](https://xapi.to) is **required** before using any search tool.
+
+**Option 1 — Environment variable (recommended):**
+
+```bash
+export XAPI_KEY="sk-..."
+```
+
+**Option 2 — OpenClaw config:**
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "xapi-search": {
+        "config": {
+          "webSearch": { "apiKey": "sk-..." }
+        }
+      }
+    }
+  }
+}
+```
+
 ## When to use which tool
 
 | Need | Tool | When |

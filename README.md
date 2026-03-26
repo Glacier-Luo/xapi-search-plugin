@@ -36,7 +36,7 @@ Enable the plugin in your OpenClaw config:
 Set via environment variable (recommended):
 
 ```bash
-export XAPI_API_KEY="sk-..."
+export XAPI_KEY="sk-..."
 ```
 
 Or in your OpenClaw config:

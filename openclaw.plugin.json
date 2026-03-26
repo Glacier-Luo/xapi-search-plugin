@@ -3,7 +3,7 @@
   "description": "Web search provider powered by xapi.to unified API",
   "skills": ["./skills"],
   "providerAuthEnvVars": {
-    "xapi": ["XAPI_API_KEY"]
+    "xapi": ["XAPI_KEY"]
   },
   "uiHints": {
     "webSearch.apiKey": {
